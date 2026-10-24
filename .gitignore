@@ -40,3 +40,4 @@ build/
 
 ### Docker Database Runtime Data ###
 environment/data/
+environment/grafana-storage/
