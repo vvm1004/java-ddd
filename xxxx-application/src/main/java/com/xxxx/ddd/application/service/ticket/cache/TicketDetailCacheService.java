@@ -1,5 +1,7 @@
 package com.xxxx.ddd.application.service.ticket.cache;
 
+import com.google.common.cache.Cache;
+import com.google.common.cache.CacheBuilder;
 import com.xxxx.ddd.domain.model.entity.TicketDetail;
 import com.xxxx.ddd.domain.service.TicketDetailDomainService;
 import com.xxxx.ddd.infrastructure.cache.redis.RedisInfrasService;
@@ -20,6 +22,13 @@ public class TicketDetailCacheService {
     private RedisInfrasService redisInfrasService;
     @Autowired
     private TicketDetailDomainService ticketDetailDomainService;
+
+    // use guava
+    private final static Cache<Long, TicketDetail> ticketDetailLocalCache = CacheBuilder.newBuilder()
+            .initialCapacity(10)
+            .concurrencyLevel(8)
+            .expireAfterWrite(10, TimeUnit.MINUTES)
+            .build();
 
     public TicketDetail getTicketDefaultCacheNormal(Long id, Long version) {
         // 1. get ticket item by redis
@@ -86,6 +95,78 @@ public class TicketDetailCacheService {
 
             // neu co thi set redis
             redisInfrasService.setObject(genEventItemKey(id), ticketDetail); // TTL
+            return ticketDetail;
+
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        } finally {
+            // Lưu ý: Cho dù thành công hay không cũng phải unLock, bằng mọi giá.
+            // Lưu ý: Cho dù thành công hay không cũng phải unLock, bằng mọi giá.
+            // Lưu ý: Cho dù thành công hay không cũng phải unLock, bằng mọi giá.
+            locker.unlock();
+        }
+    }
+
+    private TicketDetail getTicketDetaiLocalCache(Long id) {
+        try {
+            return ticketDetailLocalCache.getIfPresent(id);
+        } catch (Exception e) {
+            throw new RuntimeException();
+        }
+    }
+
+    // Cache local
+    public TicketDetail getTicketDefaultCacheLocal(Long id, Long version) {
+        // 1. Get Item local cache
+        TicketDetail ticketDetail = getTicketDetaiLocalCache(id);
+
+        if (ticketDetail != null) {
+            log.info("FROM LOCAL CACHE EXIST {}", ticketDetail);
+            return ticketDetail;
+        }
+
+        // 2. Get Distributed Cache
+        ticketDetail = redisInfrasService.getObject(genEventItemKey(id), TicketDetail.class); // ticketDetailDomainService.getTicketDetailById(id);
+        if (ticketDetail != null) {
+            log.info("FROM DISTRIBUTED CACHE EXIST {}", ticketDetail);
+            ticketDetailLocalCache.put(id, ticketDetail); // set item to local cache
+            return ticketDetail;
+        }
+
+        RedisDistributedLocker locker = redisDistributedService.getDistributedLock("PRO_LOCK_KEY_ITEM" + id);
+        try {
+            // 1 - Tao lock
+            boolean isLock = locker.tryLock(1, 5, TimeUnit.SECONDS);
+            // Lưu ý: Cho dù thành công hay không cũng phải unLock, bằng mọi giá.
+            // Lưu ý: Cho dù thành công hay không cũng phải unLock, bằng mọi giá.
+            // Lưu ý: Cho dù thành công hay không cũng phải unLock, bằng mọi giá.
+            if (!isLock) {
+                // log.info("LOCK WAIT ITEM PLEASE....{}", version);
+                return ticketDetail;
+            }
+            // Get cache
+            ticketDetail = redisInfrasService.getObject(genEventItemKey(id), TicketDetail.class);
+            // 2. YES
+            if (ticketDetail != null) {
+                // log.info("FROM CACHE NGON A {}, {}, {}", id, version, ticketDetail);
+                ticketDetailLocalCache.put(id, ticketDetail); // set item to local cache
+                return ticketDetail;
+            }
+            // 3 -> van khong co thi truy van DB
+
+            ticketDetail = ticketDetailDomainService.getTicketDetailById(id);
+            log.info("FROM DBS ->>>> {}, {}", ticketDetail, version);
+            if (ticketDetail == null) { // Neu trong dbs van khong co thi return ve not exists;
+                log.info("TICKET NOT EXITS....{}", version);
+                // set
+                redisInfrasService.setObject(genEventItemKey(id), ticketDetail);
+                ticketDetailLocalCache.put(id, null);
+                return ticketDetail;
+            }
+
+            // neu co thi set redis
+            redisInfrasService.setObject(genEventItemKey(id), ticketDetail); // TTL
+            ticketDetailLocalCache.put(id, ticketDetail); // set item to local cache
             return ticketDetail;
 
         } catch (Exception e) {
