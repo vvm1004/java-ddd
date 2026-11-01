@@ -98,4 +98,9 @@ public class RedisInfrasServiceImpl  implements RedisInfrasService {
 
         return null; // hoặc ném ra một ngoại lệ tùy ý
     }
+
+    @Override
+    public void delete(String key) {
+        redisTemplate.delete(key);
+    }
 }

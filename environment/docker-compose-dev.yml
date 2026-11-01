@@ -26,7 +26,7 @@ services:
   #Redis
   redis:
     container_name: pre-event-redis
-    image: redislabs/redismod:latest
+    image: redis:latest
     ports:
       - "6319:6379"
     networks:

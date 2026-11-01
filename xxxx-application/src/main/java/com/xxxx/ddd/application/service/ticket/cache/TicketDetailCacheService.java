@@ -107,18 +107,18 @@ public class TicketDetailCacheService {
         }
     }
 
-    private TicketDetail getTicketDetaiLocalCache(Long id) {
+    private TicketDetail getTicketDetailLocalCache(Long id) {
         try {
             return ticketDetailLocalCache.getIfPresent(id);
         } catch (Exception e) {
-            throw new RuntimeException();
+            throw new RuntimeException(e);
         }
     }
 
     // Cache local
     public TicketDetail getTicketDefaultCacheLocal(Long id, Long version) {
         // 1. Get Item local cache
-        TicketDetail ticketDetail = getTicketDetaiLocalCache(id);
+        TicketDetail ticketDetail = getTicketDetailLocalCache(id);
 
         if (ticketDetail != null) {
             log.info("FROM LOCAL CACHE EXIST {}", ticketDetail);
