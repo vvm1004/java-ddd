@@ -1,4 +1,3 @@
-version: '3.2'
 
 networks:
   pre-event-network:
@@ -6,15 +5,14 @@ networks:
 
 services:
   mysql:
-    image: mysql:8.0
+    image: mysql:8.4
     container_name: pre-event-mysql
     volumes:
       - ./data/db_data:/var/lib/mysql
       - ./mysql/init:/docker-entrypoint-initdb.d/
     command: [
       '--character-set-server=utf8mb4',
-      '--collation-server=utf8mb4_unicode_ci',
-      '--skip-character-set-client-handshake'  # Buộc tất cả kết nối sử dụng utf8mb4
+      '--collation-server=utf8mb4_unicode_ci'
     ]
     environment:
       MYSQL_ROOT_PASSWORD: root1234
@@ -122,6 +120,50 @@ services:
       - 9121:9121
     networks:
       - pre-event-network
-      
+
+  elasticsearch:
+    image: elasticsearch:9.5.5
+    container_name: pre-event-elasticsearch
+    volumes:
+      - ./elk/elasticsearch.yml:/usr/share/elasticsearch/config/elasticsearch.yml
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    environment:
+      ES_JAVA_OPTS: "-Xmx256m -Xms256m"
+      discovery.type: single-node
+    networks:
+      - pre-event-network
+
+  logstash:
+    image: logstash:9.5.5
+    container_name: pre-event-logstash
+    volumes:
+      - ./elk/logstash.yml:/usr/share/logstash/config/logstash.yml
+      - ./elk/pipeline:/usr/share/logstash/pipeline
+    ports:
+      - "5044:5044"
+      - "5033:5000/tcp"
+      - "5022:5000/udp"
+      - "9600:9600"
+    environment:
+      LS_JAVA_OPTS: "-Xmx256m -Xms256m"
+    networks:
+      - pre-event-network
+    depends_on:
+      - elasticsearch
+
+  kibana:
+    image: kibana:9.5.5
+    container_name: pre-event-kibana
+    volumes:
+      - ./elk/kibana.yml:/usr/share/kibana/config/kibana.yml
+    ports:
+      - "5601:5601"
+    networks:
+      - pre-event-network
+    depends_on:
+      - elasticsearch
+
 volumes:
   grafana-storage:
